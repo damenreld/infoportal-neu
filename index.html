@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flexibles Informationsportal - Startklar</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" async></script>
+    <style>
+        :root {
+            --bg-color: #f4f6f9;
+            --card-bg: #ffffff;
+            --text-color: #333333;
+            --accent-color: #0066cc;
+            --admin-border: #ffcc00;
+            --delete-color: #ef4444;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.6;
+            padding: 20px;
+            margin: 0;
+        }
+
+        .container {
+            width: 100%;
+            box-sizing: border-box;
+            background: var(--card-bg);
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            position: relative;
+        }
+
+        #adminBtn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: #e2e8f0;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            z-index: 10;
+        }
+
+        #adminBtn:hover { background: #cbd5e1; }
+
+        .admin-toolbar {
+            display: none;
+            background: #1e293b;
+            color: white;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            gap: 10px;
+        }
+
+        .admin-mode .admin-toolbar { display: flex; flex-wrap: wrap; align-items: center; }
+
+        .admin-toolbar button {
+            background: #334155; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 0.85rem;
+        }
+        .admin-toolbar button:hover { background: #475569; }
+
+        .content-wrapper { position: relative; margin-bottom: 15px; width: 100%; }
+
+        .delete-btn {
+            display: none; position: absolute; top: -10px; right: 0px; background: var(--delete-color);
+            color: white; border: none; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; cursor: pointer; z-index: 5;
+        }
+        .admin-mode .delete-btn { display: block; }
+
+        .admin-mode .editable-content { outline: 2px dashed var(--admin-border); background-color: #fffdf5; padding: 6px; border-radius: 4px; }
+
+        .dynamic-h2 { font-size: 1.8rem; margin-top: 25px; margin-bottom: 10px; color: #1e293b; }
+        .dynamic-p { margin-bottom: 10px; }
+        
+        .pdf-link-container { 
+            background: #f8fafc; padding: 15px; border-radius: 8px; display: flex; align-items: center; justify-content: space-between; gap: 10px; 
+        }
+        .pdf-link { color: #dc2626; font-weight: bold; text-decoration: none; }
+        
+        .image-container { text-align: center; margin-top: 15px; margin-bottom: 15px; width: 100%; }
+        .image-container img { width: 100%; max-height: 600px; object-fit: cover; border-radius: 8px; display: block; margin: 0 auto; }
+
+        .file-input-wrapper { display: none; }
+        .admin-mode .file-input-wrapper { display: inline-block; margin-top: 5px; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <button id="adminBtn" onclick="toggleAdmin()">🔒 Admin Login</button>
+
+        <div class="admin-toolbar">
+            <span>➕ Hinzufügen:</span>
+            <button onclick="addElement('h2')">Zwischenüberschrift</button>
+            <button onclick="addElement('p')">Textabsatz</button>
+            <button onclick="addElement('pdf')">PDF-Download</button>
+            <button onclick="addElement('img')">Bild-Bereich</button>
+        </div>
+
+        <div id="contentArea">
+            <div class="content-wrapper">
+                <button class="delete-btn" onclick="this.parentElement.remove()">❌ Löschen</button>
+                <h1 class="editable-content" contenteditable="false">Hauptüberschrift deiner Website</h1>
+            </div>
+            <div class="content-wrapper">
+                <button class="delete-btn" onclick="this.parentElement.remove()">❌ Löschen</button>
+                <p class="editable-content" contenteditable="false">Deine Datenbank ist jetzt erfolgreich verknüpft! Klicke oben rechts auf Admin Login, erstelle deine Inhalte und speichere sie ab.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // DEINE ZUGANGSDATEN SIND JETZT HIER EINGEFÜGT
+        // ==========================================
+        const SUPABASE_URL = "https://wgkotibumwskzdprzotj.supabase.co/rest/v1/";
+        const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indna290aWJ1bXdza3pkcHJ6b3RqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5NDQzNTksImV4cCI6MjA5NTUyMDM1OX0.0Cy1mDOZ6w_hVg_HikSWRq-kW45e0kOH0kmXv5aiZCw";
+        const ADMIN_PASSWORD = "karlsruhe2026"; 
+        // ==========================================
+
+        let supabase = null;
+        let isAdmin = false;
+        let pdfCounter = Date.now(); 
+        let imgCounter = Date.now();
+
+        // Erst laden, wenn die Seite komplett bereit ist
+        window.addEventListener('DOMContentLoaded', async () => {
+            try {
+                // Prüfen, ob die Bibliothek bereitsteht und Daten nicht die Standardplatzhalter sind
+                if (typeof supabase === 'undefined' && window.supabase) {
+                    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+                    
+                    const { data, error } = await supabase
+                        .from('website_content')
+                        .select('html_data')
+                        .eq('id', 1)
+                        .single();
+
+                    if (!error && data && data.html_data !== "Start") {
+                        document.getElementById('contentArea').innerHTML = data.html_data;
+                    }
+                }
+            } catch (e) {
+                console.log("Verbindung wird hergestellt, sobald die Seite online ist.");
+            }
+        });
+
+        async function toggleAdmin() {
+            if (!isAdmin) {
+                let passwordInput = prompt("Bitte Admin-Passwort eingeben:");
+                if (passwordInput === ADMIN_PASSWORD) {
+                    isAdmin = true;
+                    document.getElementById('adminBtn').innerText = "💾 Änderungen in der Cloud speichern";
+                    document.body.classList.add('admin-mode');
+                    setEditable(true);
+                } else {
+                    alert("Falsches Passwort!");
+                }
+            } else {
+                setEditable(false);
+                document.body.classList.remove('admin-mode');
+                document.getElementById('adminBtn').innerText = "🔒 Admin Login";
+                isAdmin = false;
+
+                // Falls die Seite lokal blockiert, falls kein Server läuft
+                if (!window.supabase) {
+                    alert("Änderungen lokal im Browser simuliert! Um es im Internet für alle zu speichern, lade die Datei jetzt bei Vercel hoch.");
+                    return;
+                }
+
+                if (!supabase) {
+                    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+                }
+
+                const currentHtml = document.getElementById('contentArea').innerHTML;
+
+                const { error } = await supabase
+                    .from('website_content')
+                    .update({ html_data: currentHtml })
+                    .eq('id', 1);
+
+                if (error) {
+                    alert("Fehler beim Speichern in Supabase: " + error.message);
+                } else {
+                    alert("🎉 Erfolgreich weltweit in deiner Cloud gespeichert!");
+                }
+            }
+        }
+
+        function setEditable(status) {
+            const elements = document.getElementById('contentArea').querySelectorAll('h1, h2, p, .pdf-link');
+            elements.forEach(el => {
+                el.contentEditable = status ? "true" : "false";
+            });
+        }
+
+        function addElement(type) {
+            const contentArea = document.getElementById('contentArea');
+            const wrapper = document.createElement('div');
+            wrapper.className = 'content-wrapper';
+            wrapper.innerHTML = `<button class="delete-btn" onclick="this.parentElement.remove()">❌ Löschen</button>`;
+
+            if (type === 'h2') {
+                wrapper.innerHTML += `<h2 class="dynamic-h2 editable-content" contenteditable="true">Neue Zwischenüberschrift</h2>`;
+            } 
+            else if (type === 'p') {
+                wrapper.innerHTML += `<p class="dynamic-p editable-content" contenteditable="true">Hier steht dein neuer Informationstext.</p>`;
+            } 
+            else if (type === 'pdf') {
+                pdfCounter++;
+                wrapper.innerHTML += `
+                    <div class="pdf-link-container editable-content">
+                        <a id="pdfLink_${pdfCounter}" class="pdf-link" href="#" target="_blank" contenteditable="true">📄 Dokument-Name (Hier umbenennen)</a>
+                        <div class="file-input-wrapper">
+                            <input type="file" accept=".pdf" onchange="uploadFile(this, 'pdfLink_${pdfCounter}', 'pdf')">
+                        </div>
+                    </div>`;
+            } 
+            else if (type === 'img') {
+                imgCounter++;
+                wrapper.innerHTML += `
+                    <div class="image-container editable-content">
+                        <img id="imageTag_${imgCounter}" src="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1200&q=80" alt="Vorschau">
+                        <div class="file-input-wrapper">
+                            <input type="file" accept="image/*" onchange="uploadFile(this, 'imageTag_${imgCounter}', 'img')">
+                        </div>
+                    </div>`;
+            }
+
+            contentArea.appendChild(wrapper);
+            setEditable(isAdmin);
+        }
+
+        function uploadFile(input, targetId, fileType) {
+            if (input.files && input.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const targetEl = document.getElementById(targetId);
+                    if (fileType === 'pdf') {
+                        targetEl.href = e.target.result;
+                        alert("PDF erfolgreich verknüpft!");
+                    } else if (fileType === 'img') {
+                        targetEl.src = e.target.result;
+                    }
+                };
+                reader.readAsDataURL(input.files[0]);
+            }
+        }
+    </script>
+</body>
+</html>
